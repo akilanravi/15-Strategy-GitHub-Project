@@ -26,3 +26,9 @@ Research-only backtester: 15 independent signal sets, both directions, completed
 - There is no train/test split or walk-forward selection in this starter; rankings are exploratory and cannot prove future profitability.
 - No automatic live orders are placed.
 - This version uses 10 configured symbols; for all F&O stocks, first build and validate a historical dated universe and rate-limited data ingestion pipeline.
+
+
+### Fix: instrument mapping
+`instruments.csv` contains stock symbols. When running with `dhan`, the program now downloads Dhan's public scrip master and resolves current NSE equity security IDs automatically. When running with `yahoo`, it creates `.NS` symbols automatically. If the Dhan scrip master schema or URL changes, the run will report a mapping error instead of inventing IDs.
+
+**Limits:** This is an underlying-equity research prototype. Historical membership, actual options premium P&L, verified fee schedules and full ten-year intraday data are not included. The configured cost is an illustrative estimate.

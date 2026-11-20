@@ -8,6 +8,33 @@ ROOT=Path(__file__).parent
 DATA=ROOT/'data'; OUT=ROOT/'reports'
 DATA.mkdir(exist_ok=True); OUT.mkdir(exist_ok=True)
 
+def resolve_dhan_instruments(instruments):
+    """Resolve missing Dhan security IDs from the official public scrip master."""
+    needed={'security_id','exchange_segment','instrument'}
+    if needed.issubset(instruments.columns) and instruments['security_id'].notna().all():
+        return instruments
+    url='https://images.dhan.co/api-data/api-scrip-master.csv'
+    try:
+        master=pd.read_csv(url,low_memory=False,dtype=str)
+    except Exception as exc:
+        raise RuntimeError(f'Cannot download Dhan instrument master: {exc}') from exc
+    required={'SEM_EXM_EXCH_ID','SEM_SEGMENT','SEM_SMST_SECURITY_ID','SEM_TRADING_SYMBOL','SEM_INSTRUMENT_NAME'}
+    missing=required-set(master.columns)
+    if missing:
+        raise RuntimeError(f'Dhan instrument master format changed: missing {sorted(missing)}')
+    master=master[(master['SEM_EXM_EXCH_ID']=='NSE') & (master['SEM_SEGMENT']=='E')].copy()
+    master['match_symbol']=master['SEM_TRADING_SYMBOL'].astype(str).str.strip().str.upper()
+    master=master.drop_duplicates('match_symbol').set_index('match_symbol')
+    for symbol in instruments.index:
+        if symbol not in master.index:
+            print(f'WARNING: {symbol} missing from current Dhan NSE equity instrument master',flush=True)
+            continue
+        item=master.loc[symbol]
+        instruments.loc[symbol,'security_id']=str(item['SEM_SMST_SECURITY_ID']).strip()
+        instruments.loc[symbol,'exchange_segment']='NSE_EQ'
+        instruments.loc[symbol,'instrument']='EQUITY'
+    return instruments
+
 def fetch_dhan(row, start, end):
     token=os.environ.get('DHAN_ACCESS_TOKEN')
     if not token: raise RuntimeError('Set DHAN_ACCESS_TOKEN in GitHub Secrets or environment')
@@ -134,7 +161,7 @@ def backtest(df, strategy, direction, mask, cfg, symbol):
             exit_price=close
             if idx[k].strftime('%H:%M')>='15:15': reason='EOD'; break
         gross=sign*(exit_price-entry)*qty
-        cost=(entry+exit_price)*qty*cfg['round_trip_cost_bps']/20000
+        cost=(entry+exit_price)*qty*cfg['round_trip_cost_bps']/10000
         trades.append(dict(symbol=symbol,strategy=strategy,direction=direction,entry_time=str(idx[j]),exit_time=str(idx[last]),entry=entry,exit=exit_price,qty=qty,gross=round(gross,2),estimated_cost=round(cost,2),net=round(gross-cost,2),exit_reason=reason))
         i=last+1
     return trades
@@ -142,7 +169,11 @@ def backtest(df, strategy, direction, mask, cfg, symbol):
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--provider',choices=['dhan','yahoo']); ap.add_argument('--start'); ap.add_argument('--end'); ap.add_argument('--symbols'); args=ap.parse_args()
     cfg=json.loads((ROOT/'config.json').read_text()); provider=args.provider or cfg['provider']; start=args.start or cfg['start']; end=args.end or cfg['end']
-    instruments=pd.read_csv(ROOT/'instruments.csv',dtype={'security_id':str}).set_index('symbol')
+    instruments=pd.read_csv(ROOT/'instruments.csv',dtype=str).set_index('symbol')
+    if provider=='dhan':
+        instruments=resolve_dhan_instruments(instruments)
+    if provider=='yahoo' and 'yahoo_symbol' not in instruments.columns:
+        instruments['yahoo_symbol']=instruments.index.astype(str)+'.NS'
     symbols=args.symbols.split(',') if args.symbols else cfg['symbols']
     trades=[]; coverage=[]
     for sym in symbols:
@@ -150,6 +181,8 @@ def main():
             coverage.append(dict(symbol=sym,status='NOT_MAPPED')); continue
         row=instruments.loc[sym]
         try:
+            if provider=='dhan' and (pd.isna(row.get('security_id')) or not str(row.get('security_id')).strip()):
+                raise ValueError('Security ID unavailable in Dhan instrument master')
             cache=DATA/f'{sym}_{provider}.csv'
             if cache.exists():
                 old=pd.read_csv(cache,index_col=0,parse_dates=True)
