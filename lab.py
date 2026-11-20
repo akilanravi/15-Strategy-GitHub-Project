@@ -132,6 +132,10 @@ def signals(df):
       '14_MACD_EMA':(crossup(macd,macsig)&(c>e50),crossdn(macd,macsig)&(c<e50)),
       '15_Volume_PDH':(crossup(c,ph)&(v>1.5*sma(v,20)),crossdn(c,pl)&(v>1.5*sma(v,20)))
     }
+    from combined import composite_signals
+    setups.update(composite_signals(df))
+    from advanced import advanced_signals
+    setups.update(advanced_signals(df))
     return setups
 
 def backtest(df, strategy, direction, mask, cfg, symbol):
@@ -201,12 +205,12 @@ def main():
             coverage.append(dict(symbol=sym,status='ERROR',message=str(ex)[:250])); print(sym,'ERROR',ex,flush=True)
     pd.DataFrame(coverage).to_csv(OUT/'coverage.csv',index=False)
     if not trades:
-        print('No trades generated. Inspect coverage.csv.'); return
+        raise RuntimeError('No trades generated. Inspect reports/coverage.csv for data or mapping errors')
     t=pd.DataFrame(trades); t.to_csv(OUT/'trades.csv',index=False)
     rows=[]
     for (strategy,direction),g in t.groupby(['strategy','direction']):
         win=g[g.net>0].net.sum(); loss=-g[g.net<0].net.sum()
-        eq=g.net.cumsum(); dd=(eq-eq.cummax()).min()
+        g=g.sort_values('exit_time'); eq=g.net.cumsum(); dd=(eq-eq.cummax().clip(lower=0)).min()
         rows.append(dict(strategy=strategy,direction=direction,trades=len(g),win_rate_pct=round(100*(g.net>0).mean(),2),net_profit=round(g.net.sum(),2),profit_factor=round(win/loss,3) if loss else None,max_drawdown_rupees=round(dd,2),estimated_cost=round(g.estimated_cost.sum(),2)))
     pd.DataFrame(rows).sort_values('net_profit',ascending=False).to_csv(OUT/'ranking.csv',index=False)
     t.assign(month=t.entry_time.str[:7]).groupby(['strategy','direction','month'],as_index=False).net.sum().to_csv(OUT/'monthly.csv',index=False)
