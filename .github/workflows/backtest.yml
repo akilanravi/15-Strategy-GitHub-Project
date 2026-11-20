@@ -1,4 +1,4 @@
-name: 27 Strategy Backtest (15 Original + 12 Combined)
+name: 27 Strategies x 5 Exits - Engine Audit
 on:
   workflow_dispatch:
     inputs:
@@ -27,6 +27,8 @@ jobs:
         run: python -m unittest -v test_combinations
       - name: Verify seven-filter strategies
         run: python -m unittest -v test_advanced
+      - name: Verify execution engine
+        run: python -m unittest -v test_engine
       - name: Run backtests
         env:
           DHAN_ACCESS_TOKEN: ${{ secrets.DHAN_ACCESS_TOKEN }}
