@@ -1,1 +1,37 @@
-
+name: 15 Strategy Backtest
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'dhan or yahoo'
+        required: true
+        default: 'dhan'
+        type: choice
+        options: [dhan, yahoo]
+  schedule:
+    - cron: '30 12 * * 6'
+permissions:
+  contents: read
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run backtests
+        env:
+          DHAN_ACCESS_TOKEN: ${{ secrets.DHAN_ACCESS_TOKEN }}
+          DHAN_CLIENT_ID: ${{ secrets.DHAN_CLIENT_ID }}
+          PROVIDER: ${{ inputs.provider || 'dhan' }}
+        run: python lab.py --provider "$PROVIDER"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backtest-results
+          path: reports/*.csv
+          retention-days: 30
