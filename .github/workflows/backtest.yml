@@ -1,4 +1,4 @@
-name: 15 Strategy Backtest
+name: 27 Strategy Backtest (15 Original + 12 Combined)
 on:
   workflow_dispatch:
     inputs:
@@ -23,6 +23,10 @@ jobs:
           python-version: '3.11'
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Verify composite strategy calculations
+        run: python -m unittest -v test_combinations
+      - name: Verify seven-filter strategies
+        run: python -m unittest -v test_advanced
       - name: Run backtests
         env:
           DHAN_ACCESS_TOKEN: ${{ secrets.DHAN_ACCESS_TOKEN }}
