@@ -1,0 +1,12 @@
+{
+  "provider": "dhan",
+  "start": "2021-11-20",
+  "end": "2026-11-20",
+  "capital": 100000,
+  "per_trade_capital": 25000,
+  "round_trip_cost_bps": 12,
+  "stop_pct": 0.0075,
+  "target_pct": 0.015,
+  "max_bars": 24,
+  "symbols": ["RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "SBIN", "BHARTIARTL", "ITC", "LT", "AXISBANK"]
+}
