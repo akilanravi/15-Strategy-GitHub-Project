@@ -8,5 +8,31 @@
   "stop_pct": 0.0075,
   "target_pct": 0.015,
   "max_bars": 24,
-  "symbols": ["RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "SBIN", "BHARTIARTL", "ITC", "LT", "AXISBANK"]
+  "symbols": [
+    "RELIANCE",
+    "HDFCBANK",
+    "ICICIBANK",
+    "INFY",
+    "TCS",
+    "SBIN",
+    "BHARTIARTL",
+    "ITC",
+    "LT",
+    "AXISBANK"
+  ],
+  "exit_models": [
+    "E1_FIXED",
+    "E2_ATR",
+    "E3_ST7_2",
+    "E4_ATR_TRAIL",
+    "E5_STRUCTURE"
+  ],
+  "cooldown_bars": 3,
+  "max_trades_per_symbol_day": 3,
+  "max_concurrent_positions": 4,
+  "structure_lookback": 10,
+  "cost_model": "equity_intraday_approx",
+  "slippage_bps": 2,
+  "first_signal_time": "09:30",
+  "last_signal_time": "14:40"
 }

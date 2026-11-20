@@ -1,3 +1,17 @@
+# UPDATED ENGINE — 27 strategies x five 5-minute exit models
+
+This version retains the 27 original signal strategies, and compares E1 fixed stop/target, E2 ATR stop/target, E3 ATR initial stop + Supertrend(7,2) reversal, E4 ATR trailing stop, and E5 recent-structure stop + 2R target.
+
+Execution: signal on a completed 5-minute candle, entry at next candle open, fresh-signal edge detection, configurable cooldown and maximum 3 trades per stock per day. Stops are checked before targets when both occur inside a candle; gap-through stops use opening price. Supertrend reversals execute at the NEXT bar open (not the reversal candle close). Research costs include brokerage approximation, turnover fees, taxes and slippage; **these rates are editable assumptions and MUST be verified against your broker and current exchange schedule**. This models **equity underlying prices**, not option premiums, option charges or actual CE/PE P&L.
+
+`reports/trades.csv` and `reports/ranking.csv` contain independent per-symbol strategy simulations. `reports/portfolio_trades.csv` and `reports/portfolio_ranking.csv` apply a shared ₹100,000 capital and 4 concurrent position limit **within each strategy+exit-model independently**, across stocks and LONG/SHORT. Do not add all strategy portfolios together and interpret them as one investable account. Portfolio replay is a research approximation, not an event-driven cash ledger, and does not reinvest realized P&L.
+
+The five exit models create 135 strategy/exit combinations (each LONG/SHORT). This can take longer than the old run. Existing Dhan GitHub secrets remain unchanged. `python -m unittest -v test_engine test_combinations test_advanced` verifies calculations without Dhan credentials. GitHub Actions downloads live historical data and saves CSV artifacts. No broker orders are placed.
+
+**Important:** no profitability claim is made. Walk-forward / out-of-sample validation is still required. Intrabar fills and corporate actions remain OHLC/data limitations.
+
+---
+
 # Indian 15 Strategy Backtesting Lab
 
 Research-only backtester: 15 independent signal sets, both directions, completed 5-minute bars, next-bar open entry, same-day exits, simulated fixed stops and targets. Generates `reports/coverage.csv`, `trades.csv`, `ranking.csv`, and `monthly.csv`.

@@ -138,37 +138,7 @@ def signals(df):
     setups.update(advanced_signals(df))
     return setups
 
-def backtest(df, strategy, direction, mask, cfg, symbol):
-    # Signal at close of bar i, entry at OPEN of bar i+1. No overnight positions.
-    # Stops/targets tested against high/low; if both hit same bar assume stop first.
-    trades=[]; idx=df.index; mask=mask.fillna(False).to_numpy(); n=len(df)
-    i=0
-    while i<n-1:
-        if not mask[i] or idx[i].strftime('%H:%M')<'09:30' or idx[i].strftime('%H:%M')>'14:40': i+=1; continue
-        j=i+1
-        if idx[j].date()!=idx[i].date() or idx[j].strftime('%H:%M')>'14:45': i+=1; continue
-        entry=float(df.open.iloc[j]); sign=1 if direction=='LONG' else -1
-        if not np.isfinite(entry) or entry<=0: i+=1; continue
-        qty=int(float(cfg['per_trade_capital'])//entry)
-        if qty<1: i+=1; continue
-        stop=entry*(1-sign*cfg['stop_pct']); target=entry*(1+sign*cfg['target_pct'])
-        last=j; reason='TIME'; exit_price=float(df.close.iloc[j])
-        for k in range(j,min(j+int(cfg['max_bars']),n)):
-            if idx[k].date()!=idx[j].date(): break
-            hi=float(df.high.iloc[k]); lo=float(df.low.iloc[k]); close=float(df.close.iloc[k]); last=k
-            stop_hit=(lo<=stop if sign==1 else hi>=stop)
-            target_hit=(hi>=target if sign==1 else lo<=target)
-            if stop_hit:
-                exit_price=stop; reason='STOP'; break
-            if target_hit:
-                exit_price=target; reason='TARGET'; break
-            exit_price=close
-            if idx[k].strftime('%H:%M')>='15:15': reason='EOD'; break
-        gross=sign*(exit_price-entry)*qty
-        cost=(entry+exit_price)*qty*cfg['round_trip_cost_bps']/10000
-        trades.append(dict(symbol=symbol,strategy=strategy,direction=direction,entry_time=str(idx[j]),exit_time=str(idx[last]),entry=entry,exit=exit_price,qty=qty,gross=round(gross,2),estimated_cost=round(cost,2),net=round(gross-cost,2),exit_reason=reason))
-        i=last+1
-    return trades
+from engine import MODELS, backtest, portfolio_replay
 
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--provider',choices=['dhan','yahoo']); ap.add_argument('--start'); ap.add_argument('--end'); ap.add_argument('--symbols'); args=ap.parse_args()
@@ -199,7 +169,8 @@ def main():
             coverage.append(dict(symbol=sym,status='OK',first=str(df.index.min()),last=str(df.index.max()),bars=len(df)))
             for strategy,(bull,bear) in signals(df).items():
                 for direction,mask in [('LONG',bull),('SHORT',bear)]:
-                    trades+=backtest(df,strategy,direction,mask,cfg,sym)
+                    for model in cfg.get('exit_models', list(MODELS)):
+                        trades.extend(backtest(df,strategy,direction,mask,cfg,sym,model))
             print(sym,len(df),'candles',flush=True)
         except Exception as ex:
             coverage.append(dict(symbol=sym,status='ERROR',message=str(ex)[:250])); print(sym,'ERROR',ex,flush=True)
@@ -207,12 +178,17 @@ def main():
     if not trades:
         raise RuntimeError('No trades generated. Inspect reports/coverage.csv for data or mapping errors')
     t=pd.DataFrame(trades); t.to_csv(OUT/'trades.csv',index=False)
+    portfolio=portfolio_replay(t,cfg)
+    portfolio.to_csv(OUT/'portfolio_trades.csv',index=False)
     rows=[]
-    for (strategy,direction),g in t.groupby(['strategy','direction']):
+    for (strategy,direction,model),g in t.groupby(['strategy','direction','exit_model']):
         win=g[g.net>0].net.sum(); loss=-g[g.net<0].net.sum()
         g=g.sort_values('exit_time'); eq=g.net.cumsum(); dd=(eq-eq.cummax().clip(lower=0)).min()
-        rows.append(dict(strategy=strategy,direction=direction,trades=len(g),win_rate_pct=round(100*(g.net>0).mean(),2),net_profit=round(g.net.sum(),2),profit_factor=round(win/loss,3) if loss else None,max_drawdown_rupees=round(dd,2),estimated_cost=round(g.estimated_cost.sum(),2)))
+        rows.append(dict(strategy=strategy,direction=direction,exit_model=model,trades=len(g),win_rate_pct=round(100*(g.net>0).mean(),2),net_profit=round(g.net.sum(),2),profit_factor=round(win/loss,3) if loss else None,max_drawdown_rupees=round(dd,2),estimated_cost=round(g.estimated_cost.sum(),2)))
     pd.DataFrame(rows).sort_values('net_profit',ascending=False).to_csv(OUT/'ranking.csv',index=False)
-    t.assign(month=t.entry_time.str[:7]).groupby(['strategy','direction','month'],as_index=False).net.sum().to_csv(OUT/'monthly.csv',index=False)
-    print('Reports saved under reports/. This is underlying-price research, NOT option premium P&L.')
+    t.assign(month=t.entry_time.str[:7]).groupby(['strategy','direction','exit_model','month'],as_index=False).net.sum().to_csv(OUT/'monthly.csv',index=False)
+    if not portfolio.empty:
+        p=portfolio.groupby(['strategy','exit_model'],as_index=False).agg(trades=('net','size'),net_profit=('net','sum'),cost=('estimated_cost','sum'))
+        p.sort_values('net_profit',ascending=False).to_csv(OUT/'portfolio_ranking.csv',index=False)
+    print('Reports saved. Each strategy+exit model has its OWN capital pool; NOT one combined portfolio. Underlying-price research, NOT option premium P&L.')
 if __name__=='__main__': main()
